@@ -86,6 +86,6 @@ ai-commit() {
 }
 
 # If this script is being executed directly (not sourced), run the function
-if [[ "${(%):-%x}" == "${0}" ]]; then
+if [[ "${ZSH_EVAL_CONTEXT}" == "toplevel" ]]; then
     ai-commit "$@"
 fi
