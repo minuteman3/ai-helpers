@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh
 
 # ai-commit: Generate intelligent commit messages using Claude Code
-# Usage: ai-commit
+# Usage: ai-commit [additional_context]
 
 ai-commit() {
+    local additional_context="$1"
     # Check if we're in a git repository
     if ! git rev-parse --git-dir > /dev/null 2>&1; then
         echo "Error: Not in a git repository" >&2
@@ -31,12 +32,47 @@ ai-commit() {
         is_main_branch=true
     fi
 
+    # Get recent commit history for context
+    local commit_history=""
+    if [[ "$is_main_branch" == false ]]; then
+        # Get commits on this branch that aren't on main/master
+        local main_branch="main"
+        if git show-ref --verify --quiet refs/heads/master; then
+            main_branch="master"
+        fi
+        
+        # Get the last 5 commits on this branch since it diverged from main
+        commit_history=$(git log --oneline --max-count=5 "$main_branch..$current_branch" 2>/dev/null)
+    else
+        # On main branch, get last 3 recent commits for context
+        commit_history=$(git log --oneline --max-count=3 2>/dev/null)
+    fi
+
     # Build the context for Claude
     local prompt="Generate a concise, professional commit message for the following git diff. Focus on the intent and impact of the changes. Return only the commit message, no additional text."
     
     # Add branch context if not on main/master
     if [[ "$is_main_branch" == false ]]; then
         prompt+="\n\nBranch context: This is on branch '$current_branch'"
+        
+        if [[ -n "$commit_history" ]]; then
+            prompt+="\n\nRecent commits on this branch:"
+            prompt+="\n$commit_history"
+            prompt+="\n\nConsider whether this change is:"
+            prompt+="\n- A new feature or enhancement"
+            prompt+="\n- A fix or refinement of recent work"
+            prompt+="\n- An incremental improvement (like fixing syntax errors)"
+        fi
+    else
+        if [[ -n "$commit_history" ]]; then
+            prompt+="\n\nRecent commits for context:"
+            prompt+="\n$commit_history"
+        fi
+    fi
+
+    # Add additional context if provided
+    if [[ -n "$additional_context" ]]; then
+        prompt+="\n\nAdditional context: $additional_context"
     fi
 
     prompt+="\n\nGit diff:"
@@ -86,6 +122,6 @@ ai-commit() {
 }
 
 # If this script is being executed directly (not sourced), run the function
-if [[ "${(%):-%x}" == "${0}" ]]; then
+if [[ "${ZSH_EVAL_CONTEXT}" == "toplevel" ]]; then
     ai-commit "$@"
 fi

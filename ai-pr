@@ -1,0 +1,159 @@
+#!/usr/bin/env zsh
+
+# ai-pr: Generate intelligent PR descriptions using Claude Code
+# Usage: ai-pr [additional_context]
+
+ai-pr() {
+    local additional_context="$1"
+    # Check if we're in a git repository
+    if ! git rev-parse --git-dir > /dev/null 2>&1; then
+        echo "Error: Not in a git repository" >&2
+        return 1
+    fi
+
+    # Get current branch name
+    local current_branch=$(git branch --show-current)
+    if [[ -z "$current_branch" ]]; then
+        echo "Error: Could not determine current branch (detached HEAD?)" >&2
+        return 1
+    fi
+
+    # Check if we're on main/master branch
+    if [[ "$current_branch" == "master" || "$current_branch" == "main" ]]; then
+        echo "Error: Cannot create PR from main/master branch" >&2
+        return 1
+    fi
+
+    # Check if branch has upstream and is pushed to remote
+    if ! git rev-parse --verify origin/"$current_branch" > /dev/null 2>&1; then
+        echo "Error: Branch '$current_branch' not found on remote. Push the branch first." >&2
+        return 1
+    fi
+
+    # Get the main branch (prefer main over master)
+    local main_branch="main"
+    if ! git rev-parse --verify origin/main > /dev/null 2>&1; then
+        if git rev-parse --verify origin/master > /dev/null 2>&1; then
+            main_branch="master"
+        else
+            echo "Error: Could not find main or master branch on remote" >&2
+            return 1
+        fi
+    fi
+
+    echo "Generating PR description with Claude Code..."
+
+    # Get commit history for this branch (from main branch)
+    local commit_log=$(git log "$main_branch..$current_branch" --oneline)
+    if [[ -z "$commit_log" ]]; then
+        echo "Error: No commits found on branch '$current_branch' compared to '$main_branch'" >&2
+        return 1
+    fi
+
+    # Get the full diff for context
+    local branch_diff=$(git diff "$main_branch"..."$current_branch")
+
+    # Build the context for Claude
+    local prompt="Generate a concise, professional PR title and description for the following branch and commits. Focus on the intent and impact of the changes. Be succinct and avoid editorializing.
+
+Format your response as:
+TITLE: [A descriptive title under 80 characters summarizing the high-level objective]
+DESCRIPTION: [The PR description]
+
+Branch name: $current_branch
+Target branch: $main_branch
+
+Commit history:
+$commit_log"
+
+    # Add additional context if provided
+    if [[ -n "$additional_context" ]]; then
+        prompt+="
+
+Additional context: $additional_context"
+    fi
+
+    prompt+="
+
+Code changes summary:
+$branch_diff"
+
+    # Generate PR title and description using Claude Code
+    local pr_response
+    pr_response=$(claude -p "$prompt" --output-format text 2>/dev/null)
+    
+    if [[ $? -ne 0 || -z "$pr_response" ]]; then
+        echo "Error: Failed to generate PR title and description with Claude Code" >&2
+        echo "This could be due to a Claude Code installation issue." >&2
+        echo "As a fallback, here's the prompt you can copy and paste to Claude Code:" >&2
+        echo "─────────────────────────" >&2
+        echo "$prompt"
+        echo "─────────────────────────" >&2
+        return 1
+    fi
+
+
+    # Parse the title and description from the response
+    # Handle both plain and markdown formats
+    local pr_title=$(echo "$pr_response" | grep -E "^\*\*TITLE:\*\*|^TITLE:" | sed -E 's/^\*\*TITLE:\*\* *|^TITLE: *//')
+    
+    # Extract everything after DESCRIPTION: line
+    local pr_description=$(echo "$pr_response" | sed -n '/^\*\*DESCRIPTION:\*\*/,$p' | tail -n +2)
+    
+    # If that didn't work, try the plain format
+    if [[ -z "$pr_description" ]]; then
+        pr_description=$(echo "$pr_response" | sed -n '/^DESCRIPTION:/,$p' | tail -n +2)
+    fi
+
+    # Clean up the PR description
+    # Remove Claude attribution lines and trim leading/trailing whitespace
+    pr_description=$(echo "$pr_description" | sed '/🤖 Generated with \[Claude Code\]/,$d' | sed '/^[[:space:]]*$/d' | sed '1s/^[[:space:]]*//' | sed '$s/[[:space:]]*$//')
+
+    # Fallback to branch name if title parsing failed
+    if [[ -z "$pr_title" ]]; then
+        pr_title="$current_branch"
+    fi
+
+    # Add the footer
+    pr_description="$pr_description
+
+PR description generated from this branch with Claude Code"
+
+    # Show the generated title and description to the user
+    echo "\nGenerated PR title:"
+    echo "─────────────────────────"
+    echo "$pr_title"
+    echo "─────────────────────────"
+    echo "\nGenerated PR description:"
+    echo "─────────────────────────"
+    echo "$pr_description"
+    echo "─────────────────────────"
+
+    # Ask for confirmation
+    echo -n "\nProceed with creating the PR? [Y/n]: "
+    read -r response
+    
+    if [[ "$response" =~ ^[Nn]([Oo])?$ ]]; then
+        echo "PR creation cancelled."
+        return 0
+    fi
+
+    # Create the PR using gh CLI
+    if command -v gh >/dev/null 2>&1; then
+        if gh pr create --title "$pr_title" --body "$pr_description" --base "$main_branch" --draft; then
+            echo "✅ Draft PR created successfully!"
+        else
+            echo "❌ Failed to create PR" >&2
+            return 1
+        fi
+    else
+        echo "Error: GitHub CLI (gh) not found. Please install it to create PRs automatically." >&2
+        echo "Alternatively, you can copy the description above and create the PR manually." >&2
+        return 1
+    fi
+}
+
+# If this script is being executed directly (not sourced), run the function
+if [[ "${ZSH_EVAL_CONTEXT}" == "toplevel" ]]; then
+    ai-pr "$@"
+fi
