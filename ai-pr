@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh
 
 # ai-pr: Generate intelligent PR descriptions using Claude Code
-# Usage: ai-pr
+# Usage: ai-pr [additional_context]
 
 ai-pr() {
+    local additional_context="$1"
     # Check if we're in a git repository
     if ! git rev-parse --git-dir > /dev/null 2>&1; then
         echo "Error: Not in a git repository" >&2
@@ -63,7 +64,16 @@ Branch name: $current_branch
 Target branch: $main_branch
 
 Commit history:
-$commit_log
+$commit_log"
+
+    # Add additional context if provided
+    if [[ -n "$additional_context" ]]; then
+        prompt+="
+
+Additional context: $additional_context"
+    fi
+
+    prompt+="
 
 Code changes summary:
 $branch_diff"
