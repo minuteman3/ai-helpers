@@ -14,8 +14,8 @@ def main():
     commit_source = sys.argv[2] if len(sys.argv) > 2 else ""
     
     # Skip automated commits (merge, squash, rebase, cherry-pick, etc.)
-    # Only run for direct user commits (when commit_source is empty or "template")
-    if commit_source and commit_source not in ["template"]:
+    # Run for manual commits (empty, "template", or "commit")
+    if commit_source in ["merge", "squash"]:
         sys.exit(0)
     
     # Read initial message and staged diff
