@@ -50,131 +50,107 @@ def main():
     prompt = f"""
 You are an AI assistant specialized in rewriting Git commit messages to be clear, detailed, and helpful. Your task is to analyze the provided information and generate an improved commit message.
 
-
-
 First, review the following context:
 
-
-
 1. Staged Changes (This Commit):
-
 <staged_diff>
-
 {diff}
-
 </staged_diff>
 
-
-
 2. Full Branch Changes:
-
 <branch_diff>
-
 {branch_diff}
-
 </branch_diff>
 
-
-
 3. Branch Information:
-
 <branch_context>
-
-Branch: {branch_name}
-
-Base: {base_branch}
-
+Current Branch: {branch_name}
+Base Branch: {base_branch}
 </branch_context>
 
-
-
 4. Recent Commits:
-
 <recent_commits>
-
 {recent_commits}
-
 </recent_commits>
 
-
-
 5. User's Draft Message:
-
 <user_message>
-
 {initial_msg}
-
 </user_message>
 
-
-
-Now, please follow these steps to generate an improved commit message:
-
-
+Now, follow these steps to generate an improved commit message:
 
 1. Analyze the provided information:
-
    - Understand the context of the change within the broader feature or fix being worked on.
-
    - Examine the staged changes and full branch changes.
-
    - Consider the recent commit history and branch information.
 
-
-
-2. Wrap your analysis inside <commit_analysis> tags:
-
-   - Summarize the main changes you've identified, quoting specific parts of the diffs to support your analysis.
-
-   - Explain the potential reasons for these changes based on the context, referencing relevant parts of the recent commits or branch information.
-
-   - Double-check the accuracy of your description against the provided diffs, noting any discrepancies.
-
-   - Determine if you can understand the intent of the change from the context, and explicitly state your confidence level (e.g., "I'm very confident", "I'm somewhat confident", "I'm not confident").
-
-   - List any questions or uncertainties you have about the changes.
-
-
+2. Break down your thought process inside <change_analysis> tags:
+   - Summarize the main changes, quoting specific parts of the diffs and recent commits.
+   - Categorize the type of change (e.g., feature addition, bug fix, refactoring).
+   - Explain potential reasons for these changes based on the context.
+   - List any potential implications or side effects of the changes.
+   - State your confidence level in understanding the intent (e.g., "I'm very confident", "I'm somewhat confident", "I'm not confident").
+   - List any questions or uncertainties about the changes.
 
 3. Compose the rewritten commit message:
-
-   - Start with a short, descriptive title (ideally less than 80 characters).
-
+   - Start with a short, descriptive title (less than 80 characters).
    - If the intent is clear, include additional paragraphs explaining why the change was made.
-
    - If the intent is not clear, provide only a short summary of the change in the title.
-
    - Use blank lines to separate paragraphs.
-
-   - Ensure the message is professional and descriptive.
-
-   - Accurately describe the changes, even if they appear to introduce errors.
-
-   - Do not include affirmations like "sounds good" or "looks good".
-
-   - Do not comment on the correctness of the changes.
-
-
+   - Ensure the message is professional, descriptive, and accurately reflects the changes.
+   - Do not include affirmations or comment on the correctness of the changes.
 
 4. Review and refine your message:
-
    - Ensure it meets all the requirements mentioned above.
-
    - Check that it accurately reflects the changes without any erroneous descriptions.
 
-
-
-4. Format your response using these XML tags:
-
-<commit_analysis>
-[Your analysis of the changes]
-</commit_analysis>
+5. Format your response using these XML tags:
+<change_analysis>
+[Your detailed analysis of the changes]
+</change_analysis>
 
 <commit_message>
 [Your generated commit message - can be multi-line with title and description]
 </commit_message>
 
-Please ensure both the analysis and commit message are wrapped in the appropriate XML tags.
+Example output structure (note: this is a generic example, your actual content will vary based on the specific changes):
+
+<change_analysis>
+Main changes:
+1. [Description of first major change]
+   Quote from diff: "[relevant code snippet]"
+2. [Description of second major change]
+   Quote from diff: "[relevant code snippet]"
+3. [Description of third major change]
+   Quote from recent commit: "[relevant commit message]"
+
+Change category: [feature addition/bug fix/refactoring]
+
+These changes appear to be related to [feature/bug fix/refactoring]. Based on the recent commit history, it seems that this is part of a larger effort to [overall goal].
+
+Potential implications:
+- [Implication 1]
+- [Implication 2]
+
+I'm [confidence level] about the intent of these changes. [Explanation of confidence level]
+
+Questions/uncertainties:
+- [Question 1]
+- [Question 2]
+</change_analysis>
+
+<commit_message>
+[Short, descriptive title less than 80 characters]
+
+[Paragraph explaining the reason for the change, if intent is clear]
+
+[Additional paragraph with more details, if necessary]
+
+[Final paragraph summarizing the impact or importance of the change]
+</commit_message>
+
+Remember to prioritize accuracy, clarity, and helpfulness in your analysis and commit message. Your goal is to provide a commit message that will be valuable for other developers reviewing the code changes.
 """
     
     # Call Claude CLI
