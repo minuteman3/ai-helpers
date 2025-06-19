@@ -110,18 +110,12 @@ Base: {main_branch}
 4. Recent Commits for Context:
 <recent_commits>
 {recent_commits}
-</recent_commits>"""
-
-    # Add additional context if provided
-    if additional_context:
-        prompt += f"""
+</recent_commits>
 
 5. Additional Context:
 <additional_context>
 {additional_context}
-</additional_context>"""
-
-    prompt += """
+</additional_context>
 
 Now, follow these steps to generate a comprehensive PR:
 
