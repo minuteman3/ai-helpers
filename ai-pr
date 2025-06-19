@@ -1,159 +1,370 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env python3
 
-# ai-pr: Generate intelligent PR descriptions using Claude Code
-# Usage: ai-pr [additional_context]
+import sys
+import subprocess
+import re
+import os
 
-ai-pr() {
-    local additional_context="$1"
+def run_command(cmd):
+    """Run a shell command and return the output"""
+    try:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        return result.stdout.strip() if result.returncode == 0 else ""
+    except Exception:
+        return ""
+
+def run_command_check(cmd):
+    """Run a shell command and return success status"""
+    try:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        return result.returncode == 0
+    except Exception:
+        return False
+
+def is_git_repo():
+    """Check if we're in a git repository"""
+    return run_command_check("git rev-parse --git-dir > /dev/null 2>&1")
+
+def get_current_branch():
+    """Get the current branch name"""
+    branch = run_command("git branch --show-current")
+    return branch if branch else None
+
+def get_main_branch():
+    """Determine the main branch (main or master)"""
+    if run_command_check("git rev-parse --verify origin/main > /dev/null 2>&1"):
+        return "main"
+    elif run_command_check("git rev-parse --verify origin/master > /dev/null 2>&1"):
+        return "master"
+    return None
+
+def main():
+    additional_context = sys.argv[1] if len(sys.argv) > 1 else ""
+    
     # Check if we're in a git repository
-    if ! git rev-parse --git-dir > /dev/null 2>&1; then
-        echo "Error: Not in a git repository" >&2
-        return 1
-    fi
+    if not is_git_repo():
+        print("Error: Not in a git repository", file=sys.stderr)
+        sys.exit(1)
 
     # Get current branch name
-    local current_branch=$(git branch --show-current)
-    if [[ -z "$current_branch" ]]; then
-        echo "Error: Could not determine current branch (detached HEAD?)" >&2
-        return 1
-    fi
+    current_branch = get_current_branch()
+    if not current_branch:
+        print("Error: Could not determine current branch (detached HEAD?)", file=sys.stderr)
+        sys.exit(1)
 
     # Check if we're on main/master branch
-    if [[ "$current_branch" == "master" || "$current_branch" == "main" ]]; then
-        echo "Error: Cannot create PR from main/master branch" >&2
-        return 1
-    fi
+    if current_branch in ["master", "main"]:
+        print("Error: Cannot create PR from main/master branch", file=sys.stderr)
+        sys.exit(1)
 
     # Check if branch has upstream and is pushed to remote
-    if ! git rev-parse --verify origin/"$current_branch" > /dev/null 2>&1; then
-        echo "Error: Branch '$current_branch' not found on remote. Push the branch first." >&2
-        return 1
-    fi
+    if not run_command_check(f"git rev-parse --verify origin/{current_branch} > /dev/null 2>&1"):
+        print(f"Error: Branch '{current_branch}' not found on remote. Push the branch first.", file=sys.stderr)
+        sys.exit(1)
 
     # Get the main branch (prefer main over master)
-    local main_branch="main"
-    if ! git rev-parse --verify origin/main > /dev/null 2>&1; then
-        if git rev-parse --verify origin/master > /dev/null 2>&1; then
-            main_branch="master"
-        else
-            echo "Error: Could not find main or master branch on remote" >&2
-            return 1
-        fi
-    fi
+    main_branch = get_main_branch()
+    if not main_branch:
+        print("Error: Could not find main or master branch on remote", file=sys.stderr)
+        sys.exit(1)
 
-    echo "Generating PR description with Claude Code..."
+    print("Generating PR description with Claude Code...", file=sys.stderr)
 
     # Get commit history for this branch (from main branch)
-    local commit_log=$(git log "$main_branch..$current_branch" --oneline)
-    if [[ -z "$commit_log" ]]; then
-        echo "Error: No commits found on branch '$current_branch' compared to '$main_branch'" >&2
-        return 1
-    fi
+    commit_log = run_command(f"git log {main_branch}..{current_branch} --oneline")
+    if not commit_log:
+        print(f"Error: No commits found on branch '{current_branch}' compared to '{main_branch}'", file=sys.stderr)
+        sys.exit(1)
 
     # Get the full diff for context
-    local branch_diff=$(git diff "$main_branch"..."$current_branch")
+    try:
+        branch_diff = subprocess.check_output(['git', 'diff', f'{main_branch}...{current_branch}'], text=True)
+        recent_commits = subprocess.check_output(['git', 'log', '--oneline', '-5'], text=True)
+    except subprocess.CalledProcessError:
+        print("Error: Failed to get git information", file=sys.stderr)
+        sys.exit(1)
 
-    # Build the context for Claude
-    local prompt="Generate a concise, professional PR title and description for the following branch and commits. Focus on the intent and impact of the changes. Be succinct and avoid editorializing.
+    # Create the sophisticated prompt for Claude
+    prompt = f"""
+You are an AI assistant specialized in generating comprehensive GitHub Pull Request titles and descriptions. Your task is to analyze the provided information and generate a well-structured PR.
 
-Format your response as:
-TITLE: [A descriptive title under 80 characters summarizing the high-level objective]
-DESCRIPTION: [The PR description]
+First, review the following context:
 
-Branch name: $current_branch
-Target branch: $main_branch
+1. Branch Changes (Full Diff):
+<branch_diff>
+{branch_diff}
+</branch_diff>
 
-Commit history:
-$commit_log"
+2. Branch Information:
+<branch_context>
+Branch: {current_branch}
+Base: {main_branch}
+</branch_context>
+
+3. Commit History:
+<commit_log>
+{commit_log}
+</commit_log>
+
+4. Recent Commits for Context:
+<recent_commits>
+{recent_commits}
+</recent_commits>"""
 
     # Add additional context if provided
-    if [[ -n "$additional_context" ]]; then
-        prompt+="
+    if additional_context:
+        prompt += f"""
 
-Additional context: $additional_context"
-    fi
+5. Additional Context:
+<additional_context>
+{additional_context}
+</additional_context>"""
 
-    prompt+="
+    prompt += """
 
-Code changes summary:
-$branch_diff"
+Now, please follow these steps to generate a comprehensive PR:
 
-    # Generate PR title and description using Claude Code
-    local pr_response
-    pr_response=$(claude -p "$prompt" --output-format text 2>/dev/null)
+1. Analyze the provided information:
+   - Understand the overall purpose and scope of the changes
+   - Examine the branch changes and commit history
+   - Consider the impact and significance of the modifications
+   - Identify the type of change (feature, bugfix, refactor, etc.)
+
+2. Wrap your analysis inside <pr_analysis> tags:
+   - Summarize the main changes you've identified
+   - Explain the potential reasons for these changes
+   - Determine the scope and impact of the changes
+   - Identify any notable patterns or themes in the commits
+   - State your confidence level in understanding the intent
+
+3. Generate the PR title and description:
+   - Create a concise, descriptive title (ideally less than 80 characters)
+   - Write a comprehensive description explaining:
+     * What changes were made
+     * Why the changes were necessary
+     * Any notable implementation details
+     * Impact on the codebase or users
+   - Use proper markdown formatting
+   - Include any relevant testing notes or considerations
+
+4. Format your response using these XML tags:
+
+<pr_analysis>
+[Your analysis of the changes]
+</pr_analysis>
+
+<title>
+[Your generated title]
+</title>
+
+<body>
+[Your generated PR description in markdown format]
+</body>
+
+Please ensure the title and description are professional, accurate, and provide clear value to code reviewers.
+"""
+
+    # Call Claude CLI
+    try:
+        result = subprocess.run(['claude'], input=prompt, text=True, capture_output=True)
+        if result.returncode != 0:
+            print("Error: Failed to generate PR title and description with Claude Code", file=sys.stderr)
+            print("This could be due to a Claude Code installation issue.", file=sys.stderr)
+            print("As a fallback, here's the prompt you can copy and paste to Claude Code:", file=sys.stderr)
+            print("─" * 60, file=sys.stderr)
+            print(prompt, file=sys.stderr)
+            print("─" * 60, file=sys.stderr)
+            sys.exit(1)
+        pr_response = result.stdout.strip()
+    except FileNotFoundError:
+        print("Error: Claude CLI not found. Please install it first.", file=sys.stderr)
+        sys.exit(1)
+
+    # Parse the response using XML tags
+    analysis = ""
+    pr_title = ""
+    pr_description = ""
     
-    if [[ $? -ne 0 || -z "$pr_response" ]]; then
-        echo "Error: Failed to generate PR title and description with Claude Code" >&2
-        echo "This could be due to a Claude Code installation issue." >&2
-        echo "As a fallback, here's the prompt you can copy and paste to Claude Code:" >&2
-        echo "─────────────────────────" >&2
-        echo "$prompt"
-        echo "─────────────────────────" >&2
-        return 1
-    fi
+    # Extract analysis if present
+    analysis_match = re.search(r'<pr_analysis>(.*?)</pr_analysis>', pr_response, re.DOTALL)
+    if analysis_match:
+        analysis = analysis_match.group(1).strip()
 
-
-    # Parse the title and description from the response
-    # Handle both plain and markdown formats
-    local pr_title=$(echo "$pr_response" | grep -E "^\*\*TITLE:\*\*|^TITLE:" | sed -E 's/^\*\*TITLE:\*\* *|^TITLE: *//')
+    # Extract title
+    title_match = re.search(r'<title>(.*?)</title>', pr_response, re.DOTALL)
+    if title_match:
+        pr_title = title_match.group(1).strip()
     
-    # Extract everything after DESCRIPTION: line
-    local pr_description=$(echo "$pr_response" | sed -n '/^\*\*DESCRIPTION:\*\*/,$p' | tail -n +2)
-    
-    # If that didn't work, try the plain format
-    if [[ -z "$pr_description" ]]; then
-        pr_description=$(echo "$pr_response" | sed -n '/^DESCRIPTION:/,$p' | tail -n +2)
-    fi
-
-    # Clean up the PR description
-    # Remove Claude attribution lines and trim leading/trailing whitespace
-    pr_description=$(echo "$pr_description" | sed '/🤖 Generated with \[Claude Code\]/,$d' | sed '/^[[:space:]]*$/d' | sed '1s/^[[:space:]]*//' | sed '$s/[[:space:]]*$//')
+    # Extract body/description
+    body_match = re.search(r'<body>(.*?)</body>', pr_response, re.DOTALL)
+    if body_match:
+        pr_description = body_match.group(1).strip()
 
     # Fallback to branch name if title parsing failed
-    if [[ -z "$pr_title" ]]; then
-        pr_title="$current_branch"
-    fi
+    if not pr_title:
+        pr_title = current_branch.replace('-', ' ').replace('_', ' ').title()
 
-    # Add the footer
-    pr_description="$pr_description
+    # Add the footer attribution
+    if pr_description and not pr_description.endswith("Generated with [Claude Code](https://claude.ai/code)"):
+        pr_description = f"{pr_description}\n\n🤖 Generated with [Claude Code](https://claude.ai/code)"
 
-PR description generated from this branch with Claude Code"
+    # Show result to user - redirect to terminal
+    try:
+        with open('/dev/tty', 'w') as tty:
+            tty.write("\n")
+            
+            # Show analysis if available
+            if analysis:
+                tty.write("Claude's Analysis:\n")
+                tty.write("─" * 60 + "\n")
+                tty.write(analysis + "\n")
+                tty.write("─" * 60 + "\n")
+                tty.write("\n")
+            
+            tty.write("Generated PR Title:\n")
+            tty.write("─" * 60 + "\n")
+            tty.write(pr_title + "\n")
+            tty.write("─" * 60 + "\n")
+            tty.write("\n")
+            tty.write("Generated PR Description:\n")
+            tty.write("─" * 60 + "\n")
+            tty.write(pr_description + "\n")
+            tty.write("─" * 60 + "\n")
+            tty.write("\n")
+            tty.write("Choose what to do:\n")
+            tty.write("1) Create PR with this title and description\n")
+            tty.write("2) Edit title and description\n") 
+            tty.write("3) Cancel\n")
+    except:
+        # Fallback to stderr if /dev/tty is not available
+        print(f"\nGenerated PR Title:\n{pr_title}\n", file=sys.stderr)
+        print(f"Generated PR Description:\n{pr_description}\n", file=sys.stderr)
 
-    # Show the generated title and description to the user
-    echo "\nGenerated PR title:"
-    echo "─────────────────────────"
-    echo "$pr_title"
-    echo "─────────────────────────"
-    echo "\nGenerated PR description:"
-    echo "─────────────────────────"
-    echo "$pr_description"
-    echo "─────────────────────────"
+    # Interactive choice
+    while True:
+        try:
+            # Force connection to terminal for interactive input
+            sys.stdin = open('/dev/tty', 'r')
+            sys.stdout = open('/dev/tty', 'w')
+            choice = input("Enter your choice (1-3): ").strip()
+            
+            if choice == "1":
+                # Create the PR using gh CLI
+                if not subprocess.run(['which', 'gh'], capture_output=True).returncode == 0:
+                    print("Error: GitHub CLI (gh) not found. Please install it to create PRs automatically.", file=sys.stderr)
+                    print("Alternatively, you can copy the description above and create the PR manually.", file=sys.stderr)
+                    sys.exit(1)
+                
+                try:
+                    result = subprocess.run([
+                        'gh', 'pr', 'create', 
+                        '--title', pr_title,
+                        '--body', pr_description,
+                        '--base', main_branch,
+                        '--draft'
+                    ], capture_output=True, text=True)
+                    
+                    if result.returncode == 0:
+                        print("✅ Draft PR created successfully!")
+                        # Extract PR URL from gh output if available
+                        if result.stderr:
+                            print(result.stderr.strip())
+                        sys.exit(0)
+                    else:
+                        print("❌ Failed to create PR", file=sys.stderr)
+                        if result.stderr:
+                            print(result.stderr.strip(), file=sys.stderr)
+                        sys.exit(1)
+                except Exception as e:
+                    print(f"❌ Failed to create PR: {e}", file=sys.stderr)
+                    sys.exit(1)
+                    
+            elif choice == "2":
+                # Edit the title and description
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+                    f.write(f"# PR Title\n{pr_title}\n\n# PR Description\n{pr_description}")
+                    temp_file = f.name
+                
+                editor = os.environ.get('EDITOR', 'vi')
+                subprocess.call([editor, temp_file])
+                
+                # Read back the edited content
+                with open(temp_file, 'r') as f:
+                    edited_content = f.read()
+                
+                # Parse the edited content
+                lines = edited_content.split('\n')
+                title_section = False
+                desc_section = False
+                edited_title = ""
+                edited_desc = []
+                
+                for line in lines:
+                    if line.strip() == "# PR Title":
+                        title_section = True
+                        desc_section = False
+                        continue
+                    elif line.strip() == "# PR Description":
+                        title_section = False
+                        desc_section = True
+                        continue
+                    elif line.startswith("#"):
+                        title_section = False
+                        desc_section = False
+                        continue
+                    
+                    if title_section and line.strip():
+                        edited_title = line.strip()
+                        title_section = False
+                    elif desc_section:
+                        edited_desc.append(line)
+                
+                pr_title = edited_title if edited_title else pr_title
+                pr_description = '\n'.join(edited_desc).strip() if edited_desc else pr_description
+                
+                # Clean up temp file
+                os.unlink(temp_file)
+                
+                # Now create the PR with edited content
+                try:
+                    result = subprocess.run([
+                        'gh', 'pr', 'create', 
+                        '--title', pr_title,
+                        '--body', pr_description,
+                        '--base', main_branch,
+                        '--draft'
+                    ], capture_output=True, text=True)
+                    
+                    if result.returncode == 0:
+                        print("✅ Draft PR created successfully with your edits!")
+                        if result.stderr:
+                            print(result.stderr.strip())
+                        sys.exit(0)
+                    else:
+                        print("❌ Failed to create PR", file=sys.stderr)
+                        if result.stderr:
+                            print(result.stderr.strip(), file=sys.stderr)
+                        sys.exit(1)
+                except Exception as e:
+                    print(f"❌ Failed to create PR: {e}", file=sys.stderr)
+                    sys.exit(1)
+                    
+            elif choice == "3":
+                # Cancel
+                print("PR creation cancelled.")
+                sys.exit(0)
+            else:
+                print("Please choose a valid option (1-3).")
+                
+        except KeyboardInterrupt:
+            print("\nPR creation cancelled.")
+            sys.exit(1)
+        except EOFError:
+            # Default to creating PR when EOF is encountered
+            print("\nCreating PR with generated content (default choice).")
+            choice = "1"
+            continue
 
-    # Ask for confirmation
-    echo -n "\nProceed with creating the PR? [Y/n]: "
-    read -r response
-    
-    if [[ "$response" =~ ^[Nn]([Oo])?$ ]]; then
-        echo "PR creation cancelled."
-        return 0
-    fi
-
-    # Create the PR using gh CLI
-    if command -v gh >/dev/null 2>&1; then
-        if gh pr create --title "$pr_title" --body "$pr_description" --base "$main_branch" --draft; then
-            echo "✅ Draft PR created successfully!"
-        else
-            echo "❌ Failed to create PR" >&2
-            return 1
-        fi
-    else
-        echo "Error: GitHub CLI (gh) not found. Please install it to create PRs automatically." >&2
-        echo "Alternatively, you can copy the description above and create the PR manually." >&2
-        return 1
-    fi
-}
-
-# If this script is being executed directly (not sourced), run the function
-if [[ "${ZSH_EVAL_CONTEXT}" == "toplevel" ]]; then
-    ai-pr "$@"
-fi
+if __name__ == "__main__":
+    main()
