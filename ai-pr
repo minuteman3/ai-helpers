@@ -4,6 +4,7 @@ import sys
 import subprocess
 import re
 import os
+import xml.etree.ElementTree as ET
 
 def run_command(cmd):
     """Run a shell command and return the output"""
@@ -180,25 +181,44 @@ Please ensure the title and description are professional, accurate, and provide 
         print("Error: Claude CLI not found. Please install it first.", file=sys.stderr)
         sys.exit(1)
 
-    # Parse the response using XML tags
+    # Parse the response using proper XML parsing
     analysis = ""
     pr_title = ""
     pr_description = ""
     
-    # Extract analysis if present
-    analysis_match = re.search(r'<pr_analysis>(.*?)</pr_analysis>', pr_response, re.DOTALL)
-    if analysis_match:
-        analysis = analysis_match.group(1).strip()
+    try:
+        # Wrap the response in a root element to make it valid XML
+        xml_content = f"<root>{pr_response}</root>"
+        root = ET.fromstring(xml_content)
+        
+        # Extract analysis if present
+        analysis_elem = root.find('pr_analysis')
+        if analysis_elem is not None:
+            analysis = analysis_elem.text.strip() if analysis_elem.text else ""
+        
+        # Extract title
+        title_elem = root.find('title')
+        if title_elem is not None:
+            pr_title = title_elem.text.strip() if title_elem.text else ""
+        
+        # Extract body/description
+        body_elem = root.find('body')
+        if body_elem is not None:
+            pr_description = body_elem.text.strip() if body_elem.text else ""
+            
+    except ET.ParseError:
+        # Fallback to regex if XML parsing fails
+        analysis_match = re.search(r'<pr_analysis>(.*?)</pr_analysis>', pr_response, re.DOTALL)
+        if analysis_match:
+            analysis = analysis_match.group(1).strip()
 
-    # Extract title
-    title_match = re.search(r'<title>(.*?)</title>', pr_response, re.DOTALL)
-    if title_match:
-        pr_title = title_match.group(1).strip()
-    
-    # Extract body/description
-    body_match = re.search(r'<body>(.*?)</body>', pr_response, re.DOTALL)
-    if body_match:
-        pr_description = body_match.group(1).strip()
+        title_match = re.search(r'<title>(.*?)</title>', pr_response, re.DOTALL)
+        if title_match:
+            pr_title = title_match.group(1).strip()
+        
+        body_match = re.search(r'<body>(.*?)</body>', pr_response, re.DOTALL)
+        if body_match:
+            pr_description = body_match.group(1).strip()
 
     # Fallback to branch name if title parsing failed
     if not pr_title:

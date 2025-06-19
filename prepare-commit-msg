@@ -4,6 +4,7 @@ import sys
 import subprocess
 import re
 import os
+import xml.etree.ElementTree as ET
 
 def main():
     if len(sys.argv) < 2:
@@ -163,25 +164,17 @@ Now, please follow these steps to generate an improved commit message:
 
 
 
-Please provide only the rewritten commit message in your final output, without any preceding or succeeding text.
-
-
-
-Example output structure (for reference only, do not copy this content):
-
-
-
-Short descriptive title (less than 80 characters)
-
-
-
-Detailed explanation of what was changed and why.
-
-
-
-Additional context or implications of the change, if relevant.
+4. Format your response using these XML tags:
 
 <commit_analysis>
+[Your analysis of the changes]
+</commit_analysis>
+
+<commit_message>
+[Your generated commit message - can be multi-line with title and description]
+</commit_message>
+
+Please ensure both the analysis and commit message are wrapped in the appropriate XML tags.
 """
     
     # Call Claude CLI
@@ -195,16 +188,39 @@ Additional context or implications of the change, if relevant.
         print("Claude CLI not found. Please install it first.")
         sys.exit(1)
     
-    # Parse Claude's response to separate commit message from analysis
+    # Parse Claude's response using proper XML parsing
     analysis = ""
-    commit_message = rewritten_msg
+    commit_message = ""
     
-    # Extract analysis if present
-    analysis_match = re.search(r'<commit_analysis>(.*?)</commit_analysis>', rewritten_msg, re.DOTALL)
-    if analysis_match:
-        analysis = analysis_match.group(1).strip()
-        # Remove analysis from commit message
-        commit_message = re.sub(r'<commit_analysis>.*?</commit_analysis>', '', rewritten_msg, flags=re.DOTALL)
+    try:
+        # Wrap the response in a root element to make it valid XML
+        xml_content = f"<root>{rewritten_msg}</root>"
+        root = ET.fromstring(xml_content)
+        
+        # Extract analysis if present
+        analysis_elem = root.find('commit_analysis')
+        if analysis_elem is not None:
+            analysis = analysis_elem.text.strip() if analysis_elem.text else ""
+        
+        # Extract commit message
+        commit_msg_elem = root.find('commit_message')
+        if commit_msg_elem is not None:
+            commit_message = commit_msg_elem.text.strip() if commit_msg_elem.text else ""
+            
+    except ET.ParseError:
+        # Fallback to regex if XML parsing fails
+        analysis_match = re.search(r'<commit_analysis>(.*?)</commit_analysis>', rewritten_msg, re.DOTALL)
+        if analysis_match:
+            analysis = analysis_match.group(1).strip()
+        
+        commit_msg_match = re.search(r'<commit_message>(.*?)</commit_message>', rewritten_msg, re.DOTALL)
+        if commit_msg_match:
+            commit_message = commit_msg_match.group(1).strip()
+        else:
+            # If no XML tags found, use the whole response as commit message
+            commit_message = rewritten_msg
+            # Remove analysis from commit message if found
+            commit_message = re.sub(r'<commit_analysis>.*?</commit_analysis>', '', commit_message, flags=re.DOTALL)
     
     # Clean any markdown code block output from commit message
     commit_message = re.sub(r'^```.*$', '', commit_message, flags=re.MULTILINE)
