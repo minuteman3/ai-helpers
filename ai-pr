@@ -147,13 +147,21 @@ Now, please follow these steps to generate a comprehensive PR:
    - Use proper markdown formatting
    - Include any relevant testing notes or considerations
 
-4. Format your response as:
-TITLE: [Your generated title]
-DESCRIPTION: [Your generated description]
-
-Please ensure the title and description are professional, accurate, and provide clear value to code reviewers.
+4. Format your response using these XML tags:
 
 <pr_analysis>
+[Your analysis of the changes]
+</pr_analysis>
+
+<title>
+[Your generated title]
+</title>
+
+<body>
+[Your generated PR description in markdown format]
+</body>
+
+Please ensure the title and description are professional, accurate, and provide clear value to code reviewers.
 """
 
     # Call Claude CLI
@@ -172,7 +180,7 @@ Please ensure the title and description are professional, accurate, and provide 
         print("Error: Claude CLI not found. Please install it first.", file=sys.stderr)
         sys.exit(1)
 
-    # Parse the response
+    # Parse the response using XML tags
     analysis = ""
     pr_title = ""
     pr_description = ""
@@ -181,34 +189,24 @@ Please ensure the title and description are professional, accurate, and provide 
     analysis_match = re.search(r'<pr_analysis>(.*?)</pr_analysis>', pr_response, re.DOTALL)
     if analysis_match:
         analysis = analysis_match.group(1).strip()
-        # Remove analysis from response for cleaner parsing
-        pr_response_clean = re.sub(r'<pr_analysis>.*?</pr_analysis>', '', pr_response, flags=re.DOTALL)
-    else:
-        pr_response_clean = pr_response
 
-    # Parse the title and description from the response
-    title_match = re.search(r'^\*\*TITLE:\*\*\s*(.+)$|^TITLE:\s*(.+)$', pr_response_clean, re.MULTILINE)
+    # Extract title
+    title_match = re.search(r'<title>(.*?)</title>', pr_response, re.DOTALL)
     if title_match:
-        pr_title = title_match.group(1) or title_match.group(2)
-        pr_title = pr_title.strip()
+        pr_title = title_match.group(1).strip()
     
-    # Extract everything after DESCRIPTION: line
-    desc_match = re.search(r'^\*\*DESCRIPTION:\*\*\s*(.*)$|^DESCRIPTION:\s*(.*)$', pr_response_clean, re.MULTILINE | re.DOTALL)
-    if desc_match:
-        pr_description = desc_match.group(1) or desc_match.group(2)
-        pr_description = pr_description.strip()
-
-    # Clean up the PR description
-    # Remove Claude attribution lines and trim leading/trailing whitespace
-    pr_description = re.sub(r'🤖 Generated with \[Claude Code\].*$', '', pr_description, flags=re.MULTILINE)
-    pr_description = pr_description.strip()
+    # Extract body/description
+    body_match = re.search(r'<body>(.*?)</body>', pr_response, re.DOTALL)
+    if body_match:
+        pr_description = body_match.group(1).strip()
 
     # Fallback to branch name if title parsing failed
     if not pr_title:
         pr_title = current_branch.replace('-', ' ').replace('_', ' ').title()
 
-    # Add the footer
-    pr_description = f"{pr_description}\n\nPR description generated from this branch with Claude Code"
+    # Add the footer attribution
+    if pr_description and not pr_description.endswith("Generated with [Claude Code](https://claude.ai/code)"):
+        pr_description = f"{pr_description}\n\n🤖 Generated with [Claude Code](https://claude.ai/code)"
 
     # Show result to user - redirect to terminal
     try:
