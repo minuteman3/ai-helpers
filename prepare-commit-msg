@@ -1,0 +1,272 @@
+#!/usr/bin/env python3
+
+import sys
+import subprocess
+import re
+import os
+
+def main():
+    if len(sys.argv) < 2:
+        sys.exit(1)
+    
+    commit_msg_file = sys.argv[1]
+    commit_source = sys.argv[2] if len(sys.argv) > 2 else ""
+    
+    # Skip merge, squash, or rebase commits
+    if commit_source in ["merge", "squash", "commit"]:
+        sys.exit(0)
+    
+    # Read initial message and staged diff
+    with open(commit_msg_file, 'r') as f:
+        initial_msg = f.read().strip()
+    
+    try:
+        diff = subprocess.check_output(['git', 'diff', '--cached'], text=True)
+        branch_name = subprocess.check_output(['git', 'branch', '--show-current'], text=True).strip()
+        
+        # Determine primary branch dynamically
+        base_branch = 'main'  # Default fallback
+        try:
+            # Try to get the default branch from remote HEAD
+            result = subprocess.check_output(['git', 'symbolic-ref', 'refs/remotes/origin/HEAD'], text=True, stderr=subprocess.DEVNULL).strip()
+            base_branch = result.split('/')[-1]
+        except subprocess.CalledProcessError:
+            # Fallback: check common branch names
+            for branch in ['main', 'master', 'develop']:
+                try:
+                    subprocess.check_output(['git', 'show-ref', '--verify', '--quiet', f'refs/heads/{branch}'], stderr=subprocess.DEVNULL)
+                    base_branch = branch
+                    break
+                except subprocess.CalledProcessError:
+                    continue
+        
+        branch_diff = subprocess.check_output(['git', 'diff', f'{base_branch}...HEAD'], text=True)
+        recent_commits = subprocess.check_output(['git', 'log', '--oneline', '-5'], text=True)
+    except subprocess.CalledProcessError:
+        sys.exit(1)
+    
+    # Create the prompt for Claude
+    prompt = f"""
+You are an AI assistant specialized in rewriting Git commit messages to be clear, detailed, and helpful. Your task is to analyze the provided information and generate an improved commit message.
+
+
+
+First, review the following context:
+
+
+
+1. Staged Changes (This Commit):
+
+<staged_diff>
+
+{diff}
+
+</staged_diff>
+
+
+
+2. Full Branch Changes:
+
+<branch_diff>
+
+{branch_diff}
+
+</branch_diff>
+
+
+
+3. Branch Information:
+
+<branch_context>
+
+Branch: {branch_name}
+
+Base: {base_branch}
+
+</branch_context>
+
+
+
+4. Recent Commits:
+
+<recent_commits>
+
+{recent_commits}
+
+</recent_commits>
+
+
+
+5. User's Draft Message:
+
+<user_message>
+
+{initial_msg}
+
+</user_message>
+
+
+
+Now, please follow these steps to generate an improved commit message:
+
+
+
+1. Analyze the provided information:
+
+   - Understand the context of the change within the broader feature or fix being worked on.
+
+   - Examine the staged changes and full branch changes.
+
+   - Consider the recent commit history and branch information.
+
+
+
+2. Wrap your analysis inside <commit_analysis> tags:
+
+   - Summarize the main changes you've identified, quoting specific parts of the diffs to support your analysis.
+
+   - Explain the potential reasons for these changes based on the context, referencing relevant parts of the recent commits or branch information.
+
+   - Double-check the accuracy of your description against the provided diffs, noting any discrepancies.
+
+   - Determine if you can understand the intent of the change from the context, and explicitly state your confidence level (e.g., "I'm very confident", "I'm somewhat confident", "I'm not confident").
+
+   - List any questions or uncertainties you have about the changes.
+
+
+
+3. Compose the rewritten commit message:
+
+   - Start with a short, descriptive title (ideally less than 80 characters).
+
+   - If the intent is clear, include additional paragraphs explaining why the change was made.
+
+   - If the intent is not clear, provide only a short summary of the change in the title.
+
+   - Use blank lines to separate paragraphs.
+
+   - Ensure the message is professional and descriptive.
+
+   - Accurately describe the changes, even if they appear to introduce errors.
+
+   - Do not include affirmations like "sounds good" or "looks good".
+
+   - Do not comment on the correctness of the changes.
+
+
+
+4. Review and refine your message:
+
+   - Ensure it meets all the requirements mentioned above.
+
+   - Check that it accurately reflects the changes without any erroneous descriptions.
+
+
+
+Please provide only the rewritten commit message in your final output, without any preceding or succeeding text.
+
+
+
+Example output structure (for reference only, do not copy this content):
+
+
+
+Short descriptive title (less than 80 characters)
+
+
+
+Detailed explanation of what was changed and why.
+
+
+
+Additional context or implications of the change, if relevant.
+
+<commit_analysis>
+"""
+    
+    # Call Claude CLI
+    try:
+        result = subprocess.run(['claude'], input=prompt, text=True, capture_output=True)
+        if result.returncode != 0:
+            print("Error calling Claude CLI")
+            sys.exit(1)
+        rewritten_msg = result.stdout.strip()
+    except FileNotFoundError:
+        print("Claude CLI not found. Please install it first.")
+        sys.exit(1)
+    
+    # Parse Claude's response to separate commit message from analysis
+    analysis = ""
+    commit_message = rewritten_msg
+    
+    # Extract analysis if present
+    analysis_match = re.search(r'<commit_analysis>(.*?)</commit_analysis>', rewritten_msg, re.DOTALL)
+    if analysis_match:
+        analysis = analysis_match.group(1).strip()
+        # Remove analysis from commit message
+        commit_message = re.sub(r'<commit_analysis>.*?</commit_analysis>', '', rewritten_msg, flags=re.DOTALL)
+    
+    # Clean any markdown code block output from commit message
+    commit_message = re.sub(r'^```.*$', '', commit_message, flags=re.MULTILINE)
+    commit_message = re.sub(r'^# ', '', commit_message, flags=re.MULTILINE)
+    commit_message = re.sub(r'\n\s*\n\s*\n', '\n\n', commit_message)  # Collapse multiple blank lines
+    commit_message = commit_message.strip()
+    
+    # Show result to user - redirect to terminal
+    with open('/dev/tty', 'w') as tty:
+        tty.write("\n")
+        
+        # Show analysis if available
+        if analysis:
+            tty.write("Claude's Analysis:\n")
+            tty.write("-" * 60 + "\n")
+            tty.write(analysis + "\n")
+            tty.write("-" * 60 + "\n")
+            tty.write("\n")
+        
+        tty.write("Claude's Suggested Commit Message:\n")
+        tty.write("-" * 60 + "\n")
+        tty.write(commit_message + "\n")
+        tty.write("-" * 60 + "\n")
+        tty.write("\n")
+        tty.write("Choose what to do:\n")
+        tty.write("1) Use it\n")
+        tty.write("2) Edit it\n") 
+        tty.write("3) Keep original\n")
+        tty.write("4) Cancel commit\n")
+    
+    # Force interactive mode
+    
+    while True:
+        try:
+            sys.stdin = open('/dev/tty', 'r')
+            sys.stdout = open('/dev/tty', 'w')
+            choice = input("Enter your choice (1-4): ").strip()
+            if choice == "1":
+                with open(commit_msg_file, 'w') as f:
+                    f.write(commit_message)
+                sys.exit(0)
+            elif choice == "2":
+                with open(commit_msg_file, 'w') as f:
+                    f.write(commit_message)
+                editor = os.environ.get('EDITOR', 'vi')
+                subprocess.call([editor, commit_msg_file])
+                sys.exit(0)
+            elif choice == "3":
+                sys.exit(0)
+            elif choice == "4":
+                print("Commit cancelled.")
+                sys.exit(1)
+            else:
+                print("Please choose a valid option (1-4).")
+        except KeyboardInterrupt:
+            print("\nCommit cancelled.")
+            sys.exit(1)
+        except EOFError:
+            print("\nUsing Claude's suggestion (default choice).")
+            with open(commit_msg_file, 'w') as f:
+                f.write(commit_message)
+            sys.exit(0)
+
+if __name__ == "__main__":
+    main()
