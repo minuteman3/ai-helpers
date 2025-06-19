@@ -123,23 +123,27 @@ Base: {main_branch}
 
     prompt += """
 
-Now, please follow these steps to generate a comprehensive PR:
+Now, follow these steps to generate a comprehensive PR:
 
 1. Analyze the provided information:
-   - Understand the overall purpose and scope of the changes
-   - Examine the branch changes and commit history
-   - Consider the impact and significance of the modifications
-   - Identify the type of change (feature, bugfix, refactor, etc.)
-
-2. Wrap your analysis inside <pr_analysis> tags:
+   Break down your thought process inside <pr_analysis> tags:
+   - Identify and list changed files
+   - Categorize changes (e.g., new features, bug fixes, refactoring)
    - Summarize the main changes you've identified
    - Explain the potential reasons for these changes
    - Determine the scope and impact of the changes
    - Identify any notable patterns or themes in the commits
+   - Note any dependencies or libraries added/removed
+   - Identify potential areas of concern or review focus
    - State your confidence level in understanding the intent
+   - Double-check that your analysis is consistent with the provided information
+   - Identify the type of change (feature, bugfix, refactor, etc.)
 
-3. Generate the PR title and description:
-   - Create a concise, descriptive title (ideally less than 80 characters)
+2. Generate the PR title:
+   - Create a concise, descriptive title (less than 80 characters)
+   - Ensure the title accurately reflects the main purpose of the changes
+
+3. Generate the PR description:
    - Write a comprehensive description explaining:
      * What changes were made
      * Why the changes were necessary
@@ -151,7 +155,7 @@ Now, please follow these steps to generate a comprehensive PR:
 4. Format your response using these XML tags:
 
 <pr_analysis>
-[Your analysis of the changes]
+[Your detailed analysis of the changes]
 </pr_analysis>
 
 <title>
@@ -162,7 +166,51 @@ Now, please follow these steps to generate a comprehensive PR:
 [Your generated PR description in markdown format]
 </body>
 
-Please ensure the title and description are professional, accurate, and provide clear value to code reviewers.
+Ensure that your title and description are professional, accurate, and provide clear value to code reviewers. Double-check that all information in your output is consistent with the provided context.
+
+Example output structure (do not copy this content, it's just to illustrate the format):
+
+<pr_analysis>
+The changes in this PR involve refactoring the user authentication module. The main modifications include:
+1. Updating the password hashing algorithm
+2. Implementing two-factor authentication
+3. Improving error handling for failed login attempts
+
+These changes appear to be motivated by security concerns and aim to enhance the overall robustness of the authentication system. The scope of the changes is significant, affecting multiple files within the auth module.
+
+Based on the commit history and branch diff, I'm highly confident (90%) that this PR represents a major security enhancement for the user authentication system.
+</pr_analysis>
+
+<title>
+Enhance User Authentication with 2FA and Improved Security Measures
+</title>
+
+<body>
+## Changes Made
+- Updated password hashing algorithm to bcrypt
+- Implemented two-factor authentication using TOTP
+- Improved error handling for failed login attempts
+
+## Reason for Changes
+These updates were necessary to address potential security vulnerabilities in our current authentication system and to align with industry best practices.
+
+## Implementation Details
+- The `PasswordHasher` class now uses bcrypt with a work factor of 12
+- Added a new `TwoFactorAuth` class to handle TOTP generation and verification
+- Modified the `LoginController` to incorporate 2FA checks
+
+## Impact
+- Increased security for user accounts
+- Slightly longer login process for users (2FA step added)
+- Potential need for user education on 2FA setup
+
+## Testing Notes
+- Comprehensive unit tests added for new and modified classes
+- Manual testing required for 2FA flow
+- Load testing recommended to ensure performance under high traffic
+
+Please review these changes carefully, focusing on the security implications and user experience impact.
+</body>
 """
 
     # Call Claude CLI
