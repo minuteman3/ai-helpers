@@ -13,6 +13,17 @@ def main():
     commit_msg_file = sys.argv[1]
     commit_source = sys.argv[2] if len(sys.argv) > 2 else ""
     
+    # Exit early if a rebase is in progress
+    git_dir = subprocess.check_output(['git', 'rev-parse', '--git-dir'], text=True).strip()
+    rebase_paths = [
+        os.path.join(git_dir, 'rebase-merge'),
+        os.path.join(git_dir, 'rebase-apply'),
+        os.path.join(git_dir, 'REBASE_HEAD')
+    ]
+    
+    if any(os.path.exists(path) for path in rebase_paths):
+        sys.exit(0)
+    
     # Skip automated commits (merge, squash, rebase, cherry-pick, etc.)
     # Run for manual commits (empty, "template", or "commit")
     if commit_source in ["merge", "squash"]:
