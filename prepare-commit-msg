@@ -13,6 +13,14 @@ def main():
     commit_msg_file = sys.argv[1]
     commit_source = sys.argv[2] if len(sys.argv) > 2 else ""
     
+    # Skip if running non-interactively
+    if not os.isatty(0) or not os.isatty(1) or not os.isatty(2):
+        sys.exit(0)
+    
+    # Skip if environment indicates automated/non-interactive usage
+    if any(var in os.environ for var in ['CI', 'CLAUDE_CODE', 'ANTHROPIC_API_KEY']):
+        sys.exit(0)
+    
     # Exit early if a rebase is in progress
     git_dir = subprocess.check_output(['git', 'rev-parse', '--git-dir'], text=True).strip()
     rebase_paths = [
@@ -53,8 +61,18 @@ def main():
                 except subprocess.CalledProcessError:
                     continue
         
-        branch_diff = subprocess.check_output(['git', 'diff', f'{base_branch}...HEAD'], text=True)
-        recent_commits = subprocess.check_output(['git', 'log', '--oneline', '-5'], text=True)
+        # Handle repositories with no commits
+        try:
+            branch_diff = subprocess.check_output(['git', 'diff', f'{base_branch}...HEAD'], text=True, stderr=subprocess.DEVNULL)
+        except subprocess.CalledProcessError:
+            # If there are no commits, compare to empty tree
+            branch_diff = subprocess.check_output(['git', 'diff', '--cached'], text=True)
+        
+        try:
+            recent_commits = subprocess.check_output(['git', 'log', '--oneline', '-5'], text=True, stderr=subprocess.DEVNULL)
+        except subprocess.CalledProcessError:
+            # No commits exist yet
+            recent_commits = "(This is the first commit in the repository)"
     except subprocess.CalledProcessError:
         sys.exit(1)
     
