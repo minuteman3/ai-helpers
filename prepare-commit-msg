@@ -26,7 +26,8 @@ def main():
     rebase_paths = [
         os.path.join(git_dir, 'rebase-merge'),
         os.path.join(git_dir, 'rebase-apply'),
-        os.path.join(git_dir, 'REBASE_HEAD')
+        os.path.join(git_dir, 'REBASE_HEAD'),
+        os.path.join(git_dir, 'CHERRY_PICK_HEAD'),
     ]
     
     if any(os.path.exists(path) for path in rebase_paths):
