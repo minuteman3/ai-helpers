@@ -327,10 +327,14 @@ Please review these changes carefully, focusing on the security implications and
                     ], capture_output=True, text=True)
                     
                     if result.returncode == 0:
-                        print("✅ Draft PR created successfully!")
-                        # Extract PR URL from gh output if available
-                        if result.stderr:
-                            print(result.stderr.strip())
+                        if result.stdout:
+                            url_match = re.search(r'https://github\.com/[^\s]+', result.stdout)
+                            if url_match:
+                                pr_url = url_match.group(0)
+                                print(f"✅ Draft PR created successfully! {pr_url}")
+                            else:
+                                print("✅ Draft PR created successfully!")
+                                print(result.stdout.strip())
                         sys.exit(0)
                     else:
                         print("❌ Failed to create PR", file=sys.stderr)
@@ -399,9 +403,14 @@ Please review these changes carefully, focusing on the security implications and
                     ], capture_output=True, text=True)
                     
                     if result.returncode == 0:
-                        print("✅ Draft PR created successfully with your edits!")
-                        if result.stderr:
-                            print(result.stderr.strip())
+                        if result.stdout:
+                            url_match = re.search(r'https://github\.com/[^\s]+', result.stdout)
+                            if url_match:
+                                pr_url = url_match.group(0)
+                                print(f"✅ Draft PR created successfully with your edits! {pr_url}")
+                            else:
+                                print("✅ Draft PR created successfully with your edits!")
+                                print(result.stdout.strip())
                         sys.exit(0)
                     else:
                         print("❌ Failed to create PR", file=sys.stderr)
