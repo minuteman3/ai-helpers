@@ -61,9 +61,7 @@ mkdir -p "$SCRIPT_DIR/bin"
 cd "$SCRIPT_DIR/bin"
 ln -sf ../ai-pr ai-pr
 ln -sf ../ai-pr git-auto-pr
-ln -sf ../ai-pr claude
-ln -sf ../ai-pr gemini
-chmod +x ai-pr git-auto-pr claude gemini
+chmod +x ai-pr git-auto-pr
 
 # --- Git Hooks Setup ---
 echo "
