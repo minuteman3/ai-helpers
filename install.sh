@@ -8,14 +8,28 @@ echo "=================================="
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Check if Claude Code CLI is available
+# --- AI Model Checks ---
+echo "🔎 Checking for AI models..."
+
+# Check for Claude CLI
 if ! command -v claude &> /dev/null; then
-    echo "❌ Claude Code CLI not found. Please install it first:"
+    echo "🟡 Claude CLI not found. To use Claude, please install it:"
     echo "   Visit: https://claude.ai/code"
-    exit 1
+else
+    echo "✅ Claude CLI found"
 fi
 
-echo "✅ Claude Code CLI found"
+# Check for Gemini CLI
+if ! command -v gemini &> /dev/null; then
+    echo "🟡 Gemini CLI not found. To use Gemini, please install it:"
+    echo "   Run: npm install -g @google/gemini-cli"
+else
+    echo "✅ Gemini CLI found"
+fi
+
+# --- Dependency Checks ---
+echo "
+🔎 Checking for other dependencies."
 
 # Check if GitHub CLI is available (optional for ai-pr)
 if command -v gh &> /dev/null; then
@@ -33,17 +47,27 @@ fi
 
 echo "✅ Python 3 found"
 
+# --- Script Setup ---
+echo "
+🔧 Setting up scripts."
+
 # Make scripts executable
 echo "📝 Making scripts executable..."
 chmod +x "$SCRIPT_DIR/ai-pr" "$SCRIPT_DIR/prepare-commit-msg"
 
-# Set up bin directory with git commands
-echo "🔧 Setting up Git custom commands..."
+# Set up bin directory with symlinks
+echo "🔧 Setting up bin directory with symlinks..."
 mkdir -p "$SCRIPT_DIR/bin"
 cd "$SCRIPT_DIR/bin"
 ln -sf ../ai-pr ai-pr
 ln -sf ../ai-pr git-auto-pr
-chmod +x ai-pr git-auto-pr
+ln -sf ../ai-pr claude
+ln -sf ../ai-pr gemini
+chmod +x ai-pr git-auto-pr claude gemini
+
+# --- Git Hooks Setup ---
+echo "
+🔗 Setting up Git hooks."
 
 # Determine the global hooks directory
 GLOBAL_HOOKS_DIR=""
@@ -74,16 +98,20 @@ echo "🔗 Installing prepare-commit-msg hook globally..."
 cp "$SCRIPT_DIR/prepare-commit-msg" "$GLOBAL_HOOKS_DIR/"
 chmod +x "$GLOBAL_HOOKS_DIR/prepare-commit-msg"
 
+# --- PATH Configuration ---
+echo "
+📋 Configuring PATH."
+
 # Add tools to PATH (check if already in PATH)
 NEEDS_PATH_UPDATE=false
 BIN_DIR="$SCRIPT_DIR/bin"
 
-if ! command -v ai-pr &> /dev/null || ! command -v git-auto-pr &> /dev/null; then
+if ! command -v ai-pr &> /dev/null; then
     NEEDS_PATH_UPDATE=true
 fi
 
 if [[ "$NEEDS_PATH_UPDATE" == "true" ]]; then
-    echo "📋 Adding AI helpers to PATH..."
+    echo "➕ Adding AI helpers to PATH..."
     
     # Determine shell config file
     SHELL_CONFIG=""
@@ -116,21 +144,26 @@ else
     echo "✅ AI helpers already available in PATH"
 fi
 
+# --- Final Instructions ---
 echo ""
-echo "🎉 Installation Complete!"
+echo "🎉 Installation Complete!" 
 echo ""
-echo "What's installed:"
-echo "  • prepare-commit-msg: Globally installed Git hook"
-echo "  • ai-pr: Available in PATH for creating PRs"
-echo "  • git auto-pr: Custom Git command for creating PRs"
+echo "What was installed:"
+echo "  • prepare-commit-msg: Globally installed Git hook to help write commit messages."
+echo "  • ai-pr / git-auto-pr: Command to create PRs with AI-generated descriptions."
 echo ""
-echo "Usage:"
-echo "  • The prepare-commit-msg hook will automatically run on every commit"
-echo "  • Use 'ai-pr' or 'git auto-pr' to create pull requests with AI-generated descriptions"
+echo "How to use:"
+echo "  • The prepare-commit-msg hook will run automatically on every commit."
+echo "  • Use 'ai-pr' or 'git auto-pr' to create pull requests."
+echo ""
+echo "Configuration:"
+echo "  • By default, the scripts use Claude."
+echo "  • To use Gemini, set the AI_HELPER_MODEL environment variable:"
+echo "    export AI_HELPER_MODEL=gemini"
 echo ""
 echo "Test the installation:"
-echo "  1. Navigate to any Git repository"
-echo "  2. Make some changes and run 'git commit'"
-echo "  3. You should see Claude's commit message suggestions"
-echo "  4. Try 'git auto-pr' to create a pull request"
+echo "  1. Navigate to any Git repository."
+echo "  2. Make some changes and run 'git commit'."
+echo "  3. You should see AI-powered commit message suggestions."
+echo "  4. Try 'git auto-pr' to create a pull request."
 echo ""

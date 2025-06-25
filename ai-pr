@@ -69,7 +69,10 @@ def main():
         print("Error: Could not find main or master branch on remote", file=sys.stderr)
         sys.exit(1)
 
-    print("Generating PR description with Claude Code...", file=sys.stderr)
+    # Determine which AI model to use
+    model = os.environ.get("AI_HELPER_MODEL", "claude").lower()
+
+    print(f"Generating PR description with {model.capitalize()}...", file=sys.stderr)
 
     # Get commit history for this branch (from main branch)
     commit_log = run_command(f"git log {main_branch}..{current_branch} --oneline")
@@ -85,7 +88,7 @@ def main():
         print("Error: Failed to get git information", file=sys.stderr)
         sys.exit(1)
 
-    # Create the sophisticated prompt for Claude
+    # Create the sophisticated prompt
     prompt = f"""
 You are an AI assistant specialized in generating comprehensive GitHub Pull Request titles and descriptions. Your task is to analyze the provided information and generate a well-structured PR.
 
@@ -207,21 +210,22 @@ Please review these changes carefully, focusing on the security implications and
 </body>
 """
 
-    # Call Claude CLI
+    # Call the selected AI model
     try:
-        result = subprocess.run(['claude'], input=prompt, text=True, capture_output=True)
+        result = subprocess.run([model], input=prompt, text=True, capture_output=True)
         if result.returncode != 0:
-            print("Error: Failed to generate PR title and description with Claude Code", file=sys.stderr)
-            print("This could be due to a Claude Code installation issue.", file=sys.stderr)
-            print("As a fallback, here's the prompt you can copy and paste to Claude Code:", file=sys.stderr)
+            print(f"Error: Failed to generate PR title and description with {model.capitalize()}", file=sys.stderr)
+            print(f"This could be due to a {model.capitalize()} installation issue.", file=sys.stderr)
+            print(f"As a fallback, here's the prompt you can copy and paste to {model.capitalize()}:", file=sys.stderr)
             print("─" * 60, file=sys.stderr)
             print(prompt, file=sys.stderr)
             print("─" * 60, file=sys.stderr)
             sys.exit(1)
         pr_response = result.stdout.strip()
     except FileNotFoundError:
-        print("Error: Claude CLI not found. Please install it first.", file=sys.stderr)
+        print(f"Error: {model.capitalize()} CLI not found. Please install it first.", file=sys.stderr)
         sys.exit(1)
+
 
     # Parse the response using proper XML parsing
     analysis = ""
@@ -267,8 +271,18 @@ Please review these changes carefully, focusing on the security implications and
         pr_title = current_branch.replace('-', ' ').replace('_', ' ').title()
 
     # Add the footer attribution
-    if pr_description and not pr_description.endswith("Generated with [Claude Code](https://claude.ai/code)"):
-        pr_description = f"{pr_description}\n\n🤖 Generated with [Claude Code](https://claude.ai/code)"
+    if pr_description:
+        model_name = model.capitalize()
+        if model_name == "Claude":
+            model_url = "https://claude.ai/code"
+        elif model_name == "Gemini":
+            model_url = "https://gemini.google.com"
+        else:
+            model_url = ""
+
+        attribution = f"🤖 Generated with [{model_name}]({model_url})"
+        if not pr_description.endswith(attribution):
+            pr_description = f"{pr_description}\n\n{attribution}"
 
     # Show result to user - redirect to terminal
     try:
@@ -277,7 +291,7 @@ Please review these changes carefully, focusing on the security implications and
             
             # Show analysis if available
             if analysis:
-                tty.write("Claude's Analysis:\n")
+                tty.write(f"{model.capitalize()}'s Analysis:\n")
                 tty.write("─" * 60 + "\n")
                 tty.write(analysis + "\n")
                 tty.write("─" * 60 + "\n")
