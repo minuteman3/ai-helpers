@@ -69,10 +69,13 @@ def main():
         print("Error: Could not find main or master branch on remote", file=sys.stderr)
         sys.exit(1)
 
-    # Determine which AI model to use
-    model = os.environ.get("AI_HELPER_MODEL", "claude").lower()
+    # Determine which AI command to use
+    command = os.environ.get("AI_HELPER_COMMAND", "claude").lower()
+    
+    # Get specific model configuration
+    model = os.environ.get("AI_HELPER_MODEL")
 
-    print(f"Generating PR description with {model.capitalize()}...", file=sys.stderr)
+    print(f"Generating PR description with {command.capitalize()}...", file=sys.stderr)
 
     # Get commit history for this branch (from main branch)
     commit_log = run_command(f"git log {main_branch}..{current_branch} --oneline")
@@ -210,20 +213,25 @@ Please review these changes carefully, focusing on the security implications and
 </body>
 """
 
-    # Call the selected AI model
+    # Call the selected AI command
     try:
-        result = subprocess.run([model], input=prompt, text=True, capture_output=True)
+        # Build command with model parameter if specified
+        cmd = [command]
+        if model:
+            cmd.extend(["--model", model])
+            
+        result = subprocess.run(cmd, input=prompt, text=True, capture_output=True)
         if result.returncode != 0:
-            print(f"Error: Failed to generate PR title and description with {model.capitalize()}", file=sys.stderr)
-            print(f"This could be due to a {model.capitalize()} installation issue.", file=sys.stderr)
-            print(f"As a fallback, here's the prompt you can copy and paste to {model.capitalize()}:", file=sys.stderr)
+            print(f"Error: Failed to generate PR title and description with {command.capitalize()}", file=sys.stderr)
+            print(f"This could be due to a {command.capitalize()} installation issue.", file=sys.stderr)
+            print(f"As a fallback, here's the prompt you can copy and paste to {command.capitalize()}:", file=sys.stderr)
             print("─" * 60, file=sys.stderr)
             print(prompt, file=sys.stderr)
             print("─" * 60, file=sys.stderr)
             sys.exit(1)
         pr_response = result.stdout.strip()
     except FileNotFoundError:
-        print(f"Error: {model.capitalize()} CLI not found. Please install it first.", file=sys.stderr)
+        print(f"Error: {command.capitalize()} CLI not found. Please install it first.", file=sys.stderr)
         sys.exit(1)
 
 
@@ -272,15 +280,15 @@ Please review these changes carefully, focusing on the security implications and
 
     # Add the footer attribution
     if pr_description:
-        model_name = model.capitalize()
-        if model_name == "Claude":
-            model_url = "https://claude.ai/code"
-        elif model_name == "Gemini":
-            model_url = "https://gemini.google.com"
+        command_name = command.capitalize()
+        if command_name == "Claude":
+            command_url = "https://claude.ai/code"
+        elif command_name == "Gemini":
+            command_url = "https://gemini.google.com"
         else:
-            model_url = ""
+            command_url = ""
 
-        attribution = f"🤖 Generated with [{model_name}]({model_url})"
+        attribution = f"🤖 Generated with [{command_name}]({command_url})"
         if not pr_description.endswith(attribution):
             pr_description = f"{pr_description}\n\n{attribution}"
 
