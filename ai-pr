@@ -86,6 +86,13 @@ def main():
     # Get the full diff for context
     try:
         branch_diff = subprocess.check_output(['git', 'diff', f'{main_branch}...{current_branch}'], text=True)
+        
+        # If diff is too large (more than 200 lines), just pass file names instead
+        diff_lines = branch_diff.split('\n')
+        if len(diff_lines) > 200:
+            changed_files = subprocess.check_output(['git', 'diff', '--name-only', f'{main_branch}...{current_branch}'], text=True)
+            branch_diff = f"Changed files ({len(diff_lines)} lines of diff):\n{changed_files}"
+        
         recent_commits = subprocess.check_output(['git', 'log', '--oneline', '-5'], text=True)
     except subprocess.CalledProcessError:
         print("Error: Failed to get git information", file=sys.stderr)
