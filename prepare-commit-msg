@@ -248,13 +248,13 @@ Remember to prioritize accuracy, clarity, and helpfulness in your analysis and c
         
         # Show analysis if available
         if analysis:
-            tty.write(f"{model.capitalize()}'s Analysis:\n")
+            tty.write(f"{command.capitalize()}'s Analysis:\n")
             tty.write("-" * 60 + "\n")
             tty.write(analysis + "\n")
             tty.write("-" * 60 + "\n")
             tty.write("\n")
         
-        tty.write(f"{model.capitalize()}'s Suggested Commit Message:\n")
+        tty.write(f"{command.capitalize()}'s Suggested Commit Message:\n")
         tty.write("-" * 60 + "\n")
         tty.write(commit_message + "\n")
         tty.write("-" * 60 + "\n")
