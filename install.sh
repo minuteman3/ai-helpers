@@ -41,7 +41,7 @@ fi
 
 # Check if Python 3 is available
 if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 not found. Please install Python 3.6+ for the prepare-commit-msg hook"
+    echo "❌ Python 3 not found. Please install Python 3.6+ for the ai-commit command"
     exit 1
 fi
 
@@ -53,7 +53,7 @@ echo "
 
 # Make scripts executable
 echo "📝 Making scripts executable..."
-chmod +x "$SCRIPT_DIR/ai-pr" "$SCRIPT_DIR/prepare-commit-msg"
+chmod +x "$SCRIPT_DIR/ai-pr" "$SCRIPT_DIR/ai-commit"
 
 # Set up bin directory with symlinks
 echo "🔧 Setting up bin directory with symlinks..."
@@ -61,40 +61,10 @@ mkdir -p "$SCRIPT_DIR/bin"
 cd "$SCRIPT_DIR/bin"
 ln -sf ../ai-pr ai-pr
 ln -sf ../ai-pr git-auto-pr
-chmod +x ai-pr git-auto-pr
+ln -sf ../ai-commit ai-commit
+chmod +x ai-pr git-auto-pr ai-commit
 
-# --- Git Hooks Setup ---
-echo "
-🔗 Setting up Git hooks."
-
-# Determine the global hooks directory
-GLOBAL_HOOKS_DIR=""
-
-# Check if user already has a global hooks directory configured
-EXISTING_HOOKS_PATH=$(git config --global --get core.hooksPath 2>/dev/null || echo "")
-
-if [[ -n "$EXISTING_HOOKS_PATH" ]]; then
-    # Expand tilde if present
-    if [[ "$EXISTING_HOOKS_PATH" == "~"* ]]; then
-        GLOBAL_HOOKS_DIR="${HOME}${EXISTING_HOOKS_PATH:1}"
-    else
-        GLOBAL_HOOKS_DIR="$EXISTING_HOOKS_PATH"
-    fi
-    echo "📁 Using existing global hooks directory: $GLOBAL_HOOKS_DIR"
-else
-    # Set up a new global hooks directory
-    GLOBAL_HOOKS_DIR="$HOME/.git-hooks"
-    echo "📁 Creating new global hooks directory: $GLOBAL_HOOKS_DIR"
-    git config --global core.hooksPath "$GLOBAL_HOOKS_DIR"
-fi
-
-# Create the global hooks directory if it doesn't exist
-mkdir -p "$GLOBAL_HOOKS_DIR"
-
-# Install the prepare-commit-msg hook
-echo "🔗 Installing prepare-commit-msg hook globally..."
-cp "$SCRIPT_DIR/prepare-commit-msg" "$GLOBAL_HOOKS_DIR/"
-chmod +x "$GLOBAL_HOOKS_DIR/prepare-commit-msg"
+# Note: Git hooks setup has been removed as ai-commit is now a standalone command
 
 # --- PATH Configuration ---
 echo "
@@ -104,7 +74,7 @@ echo "
 NEEDS_PATH_UPDATE=false
 BIN_DIR="$SCRIPT_DIR/bin"
 
-if ! command -v ai-pr &> /dev/null; then
+if ! command -v ai-pr &> /dev/null || ! command -v ai-commit &> /dev/null; then
     NEEDS_PATH_UPDATE=true
 fi
 
@@ -147,11 +117,11 @@ echo ""
 echo "🎉 Installation Complete!" 
 echo ""
 echo "What was installed:"
-echo "  • prepare-commit-msg: Globally installed Git hook to help write commit messages."
+echo "  • ai-commit: Command to generate AI-powered commit messages."
 echo "  • ai-pr / git-auto-pr: Command to create PRs with AI-generated descriptions."
 echo ""
 echo "How to use:"
-echo "  • The prepare-commit-msg hook will run automatically on every commit."
+echo "  • Stage your changes with 'git add' then run 'ai-commit' to generate a commit message."
 echo "  • Use 'ai-pr' or 'git auto-pr' to create pull requests."
 echo ""
 echo "Configuration:"
@@ -165,7 +135,7 @@ echo "    (This will be passed as --model parameter to the CLI tools)"
 echo ""
 echo "Test the installation:"
 echo "  1. Navigate to any Git repository."
-echo "  2. Make some changes and run 'git commit'."
-echo "  3. You should see AI-powered commit message suggestions."
+echo "  2. Make some changes and stage them with 'git add'."
+echo "  3. Run 'ai-commit' to generate and create a commit with AI assistance."
 echo "  4. Try 'git auto-pr' to create a pull request."
 echo ""
