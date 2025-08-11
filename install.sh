@@ -61,8 +61,8 @@ mkdir -p "$SCRIPT_DIR/bin"
 cd "$SCRIPT_DIR/bin"
 ln -sf ../ai-pr ai-pr
 ln -sf ../ai-pr git-auto-pr
-ln -sf ../ai-commit ai-commit
-chmod +x ai-pr git-auto-pr ai-commit
+ln -sf ../ai-commit git-ai-commit
+chmod +x ai-pr git-auto-pr git-ai-commit
 
 # Note: Git hooks setup has been removed as ai-commit is now a standalone command
 
